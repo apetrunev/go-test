@@ -1,36 +1,76 @@
-// comment
+// parse makefile
 package main
 
 import (
-	"bytes"
+	"bufio"
+	"flag"
 	"fmt"
-	"io"
-	"net/http"
-
-	"golang.org/x/net/html"
+	"log"
+	"os"
 )
 
+type TokenType int
+
+const (
+	TokenNone TokenType = iota
+	TokenID
+	TokenColon
+	TokenTab
+	TokenSpace
+	TokenNewline
+)
+
+type Token struct {
+	Type TokenType
+	Val  string
+	Len  int
+	Row  int
+	Col  int
+}
+
+// predefined tokens
+var NoneToken = Token{Type: TokenNone, Row: -1, Col: -1, Len: -1}
+
+type Lexer struct {
+	reader *bufio.Reader
+	row    int
+	col    int
+}
+
+// get next token from file
+func (l *Lexer) GetToken() Token {
+	r, n, err := l.reader.ReadRune()
+	if err != nil {
+		log.Fatalf("err:GetToken: %v\n", err)
+	}
+	switch r {
+	case '\n':
+		l.row += 1
+		l.col = 0
+		return Token{Type: TokenNewline, Row: l.row, Col: l.col, Len: n}
+	default:
+		return NoneToken
+	}
+	return NoneToken
+}
+
 func main() {
-	url := "http://kinopoisk.ru"
-	resp, err := http.Get(url)
-	if err != nil {
-		fmt.Println(err)
-		return
+	var path string
+	flag.StringVar(&path, "path", "", "path to a file")
+	flag.Parse()
+	if path == "" {
+		log.Fatalf("err: no file to parse\n")
 	}
-	defer resp.Body.Close()
-	b, err := io.ReadAll(resp.Body)
+	f, err := os.Open(path)
 	if err != nil {
-		fmt.Println(err)
-		return
+		log.Fatalf("%v\n", err)
 	}
-	buf := bytes.NewBuffer(b)
-	z := html.NewTokenizer(buf)
-	for {
-		tt := z.Next()
-		if tt == html.ErrorToken {
-			return
-		}
-		fmt.Printf("%v+\n", tt)
+	defer f.Close()
+	reader := bufio.NewReader(f)
+	lex := Lexer{reader: reader}
+	// read instruction to tokens
+	for t := lex.GetToken(); t.Type != TokenNone; t = lex.GetToken() {
+		fmt.Printf("%v\n", t)
 	}
 
 }
