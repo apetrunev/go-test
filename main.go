@@ -18,6 +18,11 @@ const (
 	TokenTab
 	TokenSpace
 	TokenNewline
+	TokenHash
+	TokenEqual
+	TokenDollar
+	TokenLeftBrace
+	TokenRightBrace
 )
 
 type Token struct {
@@ -48,6 +53,30 @@ func (l *Lexer) GetToken() Token {
 		l.row += 1
 		l.col = 0
 		return Token{Type: TokenNewline, Row: l.row, Col: l.col, Len: n}
+	case '\t':
+		l.col += 1
+		return Token{Type: TokenTab, Row: l.row, Col: l.col, Len: n}
+	case ' ':
+		l.col += 1
+		return Token{Type: TokenSpace, Row: l.row, Col: l.col, Len: n}
+	case ':':
+		l.col += 1
+		return Token{Type: TokenColon, Row: l.row, Col: l.col, Len: n}
+	case '#':
+		l.col += 1
+		return Token{Type: TokenHash, Row: l.row, Col: l.col, Len: n}
+	case '=':
+		l.col += 1
+		return Token{Type: TokenEqual, Row: l.row, Col: l.col, Len: n}
+	case '$':
+		l.col += 1
+		return Token{Type: TokenDollar, Row: l.row, Col: l.col, Len: n}
+	case '(':
+		l.col += 1
+		return Token{Type: TokenLeftBrace, Row: l.row, Col: l.col, Len: n}
+	case ')':
+		l.col += 1
+		return Token{Type: TokenRightBrace, Row: l.row, Col: l.col, Len: n}
 	default:
 		return NoneToken
 	}
