@@ -23,6 +23,7 @@ const (
 	TokenDollar
 	TokenLeftBrace
 	TokenRightBrace
+	TokenPeriod
 )
 
 type Token struct {
@@ -77,6 +78,9 @@ func (l *Lexer) GetToken() Token {
 	case ')':
 		l.col += 1
 		return Token{Type: TokenRightBrace, Row: l.row, Col: l.col, Len: n}
+	case '.':
+		l.col += 1
+		return Token{Type: TokenPeriod, Row: l.row, Col: l.col, Len: n}
 	default:
 		return NoneToken
 	}
