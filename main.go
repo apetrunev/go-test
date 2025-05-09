@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"unicode"
 )
 
 type TokenType int
@@ -14,6 +15,7 @@ type TokenType int
 const (
 	TokenNone TokenType = iota
 	TokenID
+	TokenNumber
 	TokenColon
 	TokenTab
 	TokenSpace
@@ -25,6 +27,22 @@ const (
 	TokenRightBrace
 	TokenPeriod
 )
+
+var TokenStr = map[TokenType]string{
+	TokenNone:       "None",
+	TokenID:         "ID",
+	TokenNumber:     "Number",
+	TokenColon:      "Colon",
+	TokenTab:        "Tab",
+	TokenSpace:      "Space",
+	TokenNewline:    "Newline",
+	TokenHash:       "Hash",
+	TokenEqual:      "Equal",
+	TokenDollar:     "Dollar",
+	TokenLeftBrace:  "LeftBrace",
+	TokenRightBrace: "RightBrace",
+	TokenPeriod:     "Period",
+}
 
 type Token struct {
 	Type TokenType
@@ -82,9 +100,57 @@ func (l *Lexer) GetToken() Token {
 		l.col += 1
 		return Token{Type: TokenPeriod, Row: l.row, Col: l.col, Len: n}
 	default:
+		l.col += 1
+		if unicode.IsLetter(r) {
+			var id []rune
+			_len := n
+			id = append(id, r)
+			for {
+				// read next rune
+				r, n, err := l.reader.ReadRune()
+				if err != nil {
+					log.Fatalf("err:GetToken: %s\n", err)
+				}
+				// unread character
+				if !unicode.IsLetter(r) {
+					l.reader.UnreadRune()
+					break
+				}
+				// add rune size to lenth
+				_len += n
+				id = append(id, r)
+			}
+			return Token{Type: TokenID, Row: l.row, Col: l.col, Len: _len}
+		} else if unicode.IsDigit(r) {
+			var num []rune
+			_len := n
+			num = append(num, r)
+			for {
+				r, n, err := l.reader.ReadRune()
+				if err != nil {
+					log.Fatalf("err:GetToken: %s\n", err)
+				}
+				// unread character
+				if !unicode.IsDigit(r) {
+					l.reader.UnreadRune()
+					break
+				}
+				_len += n
+				num = append(num, r)
+			}
+			return Token{Type: TokenNumber, Row: l.row, Col: l.col, Len: _len}
+		}
 		return NoneToken
 	}
 	return NoneToken
+}
+
+func (l *Lexer) TokenToStr(t TokenType) string {
+	s, ok := TokenStr[t]
+	if !ok {
+		log.Fatalf("err:TokenToStr: unknown token %v\n", t)
+	}
+	return s
 }
 
 func main() {
@@ -103,7 +169,7 @@ func main() {
 	lex := Lexer{reader: reader}
 	// read instruction to tokens
 	for t := lex.GetToken(); t.Type != TokenNone; t = lex.GetToken() {
-		fmt.Printf("%v\n", t)
+		fmt.Printf("%s\n", lex.TokenToStr(t.Type))
 	}
 
 }
