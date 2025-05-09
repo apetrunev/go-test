@@ -113,14 +113,17 @@ func (l *Lexer) GetToken() Token {
 				}
 				// unread character
 				if !unicode.IsLetter(r) {
-					l.reader.UnreadRune()
-					break
+					// period between two words
+					if r != '.' {
+						l.reader.UnreadRune()
+						break
+					}
 				}
 				// add rune size to lenth
 				_len += n
 				id = append(id, r)
 			}
-			return Token{Type: TokenID, Row: l.row, Col: l.col, Len: _len}
+			return Token{Type: TokenID, Row: l.row, Col: l.col, Len: _len, Val: string(id)}
 		} else if unicode.IsDigit(r) {
 			var num []rune
 			_len := n
@@ -138,7 +141,7 @@ func (l *Lexer) GetToken() Token {
 				_len += n
 				num = append(num, r)
 			}
-			return Token{Type: TokenNumber, Row: l.row, Col: l.col, Len: _len}
+			return Token{Type: TokenNumber, Row: l.row, Col: l.col, Len: _len, Val: string(num)}
 		}
 		return NoneToken
 	}
@@ -169,7 +172,7 @@ func main() {
 	lex := Lexer{reader: reader}
 	// read instruction to tokens
 	for t := lex.GetToken(); t.Type != TokenNone; t = lex.GetToken() {
-		fmt.Printf("%s\n", lex.TokenToStr(t.Type))
+		fmt.Printf("%s %s\n", lex.TokenToStr(t.Type), t.Val)
 	}
 
 }
