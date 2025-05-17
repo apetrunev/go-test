@@ -303,7 +303,7 @@ func (s *Source) Build(lex Tokenizer) {
 			fmt.Printf("debug: %v\n", expr)
 			continue
 		default:
-			log.Printf("info:Build: %v\n", t)
+			log.Printf("info:Build: %v\n", lex.TokenToStr(t))
 		}
 	}
 }
