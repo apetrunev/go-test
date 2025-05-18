@@ -259,11 +259,20 @@ func (e *ExprVar) Value() string {
 	return e.Val
 }
 
+type ExprCmd struct {
+	Terms []Expr
+}
+
+func (e *ExprCmd) Value() string {
+	// not implemented
+	return ""
+}
+
 type NodeTarget struct {
 	Node
 	ID            Expr
 	Prerequisites []Expr
-	Recipe        [][]Expr
+	Recipe        []Expr
 }
 
 func (n *NodeTarget) Type() AstNodeType {
@@ -282,21 +291,21 @@ type Source struct {
 // list_recipe -> list_recipe tab expr_cmd newline
 // expr_cmd -> expr_cmd expr_term
 
-func (s *Source) recipe(lex Tokenizer) []Expr {
+func (s *Source) recipe(lex Tokenizer) Expr {
 	// current token is tab
-	var cmds []Expr
+	var cmd ExprCmd = ExprCmd{}
 	for t := lex.GetToken(); t.Type != TokenNewline; t = lex.GetToken() {
 		switch t.Type {
 		case TokenID, TokenDollar:
 			term := s.exprTerm(lex, t)
-			cmds = append(cmds, term)
+			cmd.Terms = append(cmd.Terms, term)
 		case TokenSpace:
 			continue
 		default:
 			log.Fatalf("err:recipe: %v\n", lex.TokenToStr(t))
 		}
 	}
-	return cmds
+	return &cmd
 }
 
 func (s *Source) prerequisites(lex Tokenizer) []Expr {
@@ -359,7 +368,7 @@ func (s *Source) target(lex Tokenizer, lhs Expr) {
 	switch _lhs := lhs.(type) {
 	case *ExprID, *ExprVar:
 		deps := s.prerequisites(lex)
-		var r [][]Expr
+		var r []Expr
 		for t := lex.GetToken(); t.Type == TokenTab; t = lex.GetToken() {
 			switch t.Type {
 			case TokenTab:
