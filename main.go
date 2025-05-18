@@ -3,8 +3,10 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"unicode"
@@ -22,6 +24,7 @@ const (
 	TokenNewline
 	TokenHash
 	TokenEqual
+	TokenLess
 	TokenDollar
 	TokenLeftBrace
 	TokenRightBrace
@@ -42,6 +45,7 @@ var TokenStr = map[TokenType]string{
 	TokenNewline:            "Newline",
 	TokenHash:               "Hash",
 	TokenEqual:              "Equal",
+	TokenLess:               "Less",
 	TokenDollar:             "Dollar",
 	TokenLeftBrace:          "LeftBrace",
 	TokenRightBrace:         "RightBrace",
@@ -78,6 +82,9 @@ type Tokenizer interface {
 func (l *Lexer) GetToken() Token {
 	r, n, err := l.reader.ReadRune()
 	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return NoneToken
+		}
 		log.Fatalf("err:GetToken: %v\n", err)
 	}
 	switch r {
@@ -112,6 +119,9 @@ func (l *Lexer) GetToken() Token {
 	case '.':
 		l.col += 1
 		return Token{Type: TokenPeriod, Val: ".", Row: l.row, Col: l.col, Len: n}
+	case '<':
+		l.col += 1
+		return Token{Type: TokenLess, Val: ".", Row: l.row, Col: l.col, Len: n}
 	case '\'':
 		l.col += 1
 		_len := n
@@ -119,6 +129,9 @@ func (l *Lexer) GetToken() Token {
 		for {
 			r, n, err := l.reader.ReadRune()
 			if err != nil {
+				if errors.Is(err, io.EOF) {
+					return NoneToken
+				}
 				log.Fatalf("err:GetToken: %s\n", err)
 			}
 			if r == '\'' || r == '\n' {
@@ -135,6 +148,9 @@ func (l *Lexer) GetToken() Token {
 		for {
 			r, n, err := l.reader.ReadRune()
 			if err != nil {
+				if errors.Is(err, io.EOF) {
+					return NoneToken
+				}
 				log.Fatalf("err:GetToken: %s\n", err)
 			}
 			if r == '"' || r == '\n' {
@@ -154,6 +170,9 @@ func (l *Lexer) GetToken() Token {
 				// read next rune
 				r, n, err := l.reader.ReadRune()
 				if err != nil {
+					if errors.Is(err, io.EOF) {
+						return NoneToken
+					}
 					log.Fatalf("err:GetToken: %s\n", err)
 				}
 				// unread character
@@ -176,6 +195,9 @@ func (l *Lexer) GetToken() Token {
 			for {
 				r, n, err := l.reader.ReadRune()
 				if err != nil {
+					if errors.Is(err, io.EOF) {
+						return NoneToken
+					}
 					log.Fatalf("err:GetToken: %s\n", err)
 				}
 				// unread character
@@ -241,7 +263,11 @@ type NodeTarget struct {
 	Node
 	ID            Expr
 	Prerequisites []Expr
-	Recipe        []Expr
+	Recipe        [][]Expr
+}
+
+func (n *NodeTarget) Type() AstNodeType {
+	return n.Node.Type
 }
 
 type Source struct {
@@ -256,15 +282,46 @@ type Source struct {
 // list_recipe -> list_recipe tab expr_cmd newline
 // expr_cmd -> expr_cmd expr_term
 
-func (s *Source) prerequisites(lex Tokenizer, n *NodeTarget) {
+func (s *Source) recipe(lex Tokenizer) []Expr {
+	// current token is tab
+	var cmds []Expr
+	for t := lex.GetToken(); t.Type != TokenNewline; t = lex.GetToken() {
+		switch t.Type {
+		case TokenID, TokenDollar:
+			term := s.exprTerm(lex, t)
+			cmds = append(cmds, term)
+		case TokenSpace:
+			continue
+		default:
+			log.Fatalf("err:recipe: %v\n", lex.TokenToStr(t))
+		}
+	}
+	return cmds
+}
 
+func (s *Source) prerequisites(lex Tokenizer) []Expr {
+	// current toke is TokenColon
+	var deps []Expr
+	for t := lex.GetToken(); t.Type != TokenNewline; t = lex.GetToken() {
+		switch t.Type {
+		case TokenID, TokenDollar:
+			term := s.exprTerm(lex, t)
+			deps = append(deps, term)
+		case TokenSpace:
+			continue
+		default:
+			log.Fatalf("err:prerequisites: %v\n", lex.TokenToStr(t))
+		}
+	}
+	return deps
 }
 
 func (s *Source) exprVar(lex Tokenizer, t Token) Expr {
+	// current token is TokenDollar
 	t = lex.GetToken()
 	switch t.Type {
 	case TokenLeftBrace:
-		for t.Type != TokenRightBrace || t.Type != TokenNewline {
+		for t.Type != TokenRightBrace || t.Type != TokenNewline || t.Type != TokenNone {
 			t = lex.GetToken()
 			switch t.Type {
 			case TokenID:
@@ -272,11 +329,15 @@ func (s *Source) exprVar(lex Tokenizer, t Token) Expr {
 				term := ExprVar{ExprID: ExprID{ID: t.Val}}
 				return &term
 			default:
-				log.Fatalf("err:exprVar: expected id but got %s\n", lex.TokenToStr(t))
+				log.Fatalf("err:exprVar:1 expected id but got %s\n", lex.TokenToStr(t))
 			}
 		}
+	case TokenLess:
+		// special var $<
+		term := ExprVar{ExprID: ExprID{ID: t.Val}}
+		return &term
 	default:
-		log.Fatalf("err:exprVar: expected ( but found %s\n", lex.TokenToStr(t))
+		log.Fatalf("err:exprVar:2 expected ( but found %s\n", lex.TokenToStr(t))
 	}
 	return nil
 }
@@ -293,13 +354,51 @@ func (s *Source) exprTerm(lex Tokenizer, t Token) Expr {
 	return nil
 }
 
+func (s *Source) target(lex Tokenizer, lhs Expr) {
+	// current token is TokenColon
+	switch _lhs := lhs.(type) {
+	case *ExprID, *ExprVar:
+		deps := s.prerequisites(lex)
+		var r [][]Expr
+		for t := lex.GetToken(); t.Type == TokenTab; t = lex.GetToken() {
+			switch t.Type {
+			case TokenTab:
+				cmd := s.recipe(lex)
+				r = append(r, cmd)
+			default:
+				log.Fatalf("err:target: expected TAB but found %s\n", lex.TokenToStr(t))
+			}
+		}
+		var tNode NodeTarget
+		tNode.Node.Type = AstNodeTarget
+		tNode.ID = lhs
+		tNode.Prerequisites = deps
+		tNode.Recipe = r
+		s.Tree = append(s.Tree, &tNode)
+	default:
+		log.Fatalf("err:target: expected ID or VAR but found %v\n", _lhs)
+	}
+}
+
+func (s *Source) assignment(lex Tokenizer, lhs Expr) {
+
+}
+
 func (s *Source) Build(lex Tokenizer) {
 	for t := lex.GetToken(); t.Type != TokenNone; t = lex.GetToken() {
 		switch t.Type {
 		case TokenNewline:
 			continue
 		case TokenID, TokenDollar:
+			// lfs
 			expr := s.exprTerm(lex, t)
+			tt := s.skipSpaces(lex)
+			switch tt.Type {
+			case TokenColon:
+				s.target(lex, expr)
+			case TokenEqual:
+				s.assignment(lex, expr)
+			}
 			fmt.Printf("debug: %v\n", expr)
 			continue
 		default:
