@@ -2,8 +2,8 @@
 package ast
 
 import (
-	"fmt"
 	"log"
+	"strings"
 
 	"github.com/apetrunev/go-test/pkg/lexer"
 )
@@ -23,6 +23,10 @@ type Node struct {
 	Type AstNodeType
 }
 
+const (
+	ExprAllPrerequisites = "$^"
+)
+
 type Expr interface {
 	Value() string
 }
@@ -32,7 +36,7 @@ type ExprID struct {
 }
 
 func (e *ExprID) Value() string {
-	return ""
+	return e.ID
 }
 
 type ExprVar struct {
@@ -49,8 +53,11 @@ type ExprCmd struct {
 }
 
 func (e *ExprCmd) Value() string {
-	// not implemented
-	return ""
+	var cmd []string
+	for _, term := range e.Terms {
+		cmd = append(cmd, term.Value())
+	}
+	return strings.Join(cmd, " ")
 }
 
 type NodeTarget struct {
@@ -128,7 +135,7 @@ func (s *Source) exprVar(lex lexer.Tokenizer, t lexer.Token) Expr {
 		}
 	case lexer.TokenLess:
 		// special var $<
-		term := ExprVar{ExprID: ExprID{ID: t.Val}}
+		term := ExprVar{ExprID: ExprID{ID: ExprAllPrerequisites}, Val: ExprAllPrerequisites}
 		return &term
 	default:
 		log.Fatalf("err:exprVar:2 expected ( but found %s\n", lex.TokenToStr(t))
@@ -193,10 +200,28 @@ func (s *Source) Build(lex lexer.Tokenizer) {
 			case lexer.TokenEqual:
 				s.assignment(lex, expr)
 			}
-			fmt.Printf("debug: %v\n", expr)
+			log.Printf("debug: %v\n", expr)
 			continue
 		default:
 			log.Printf("info:Build: %v\n", lex.TokenToStr(t))
+		}
+	}
+}
+
+func (s *Source) Print() {
+	for _, node := range s.Tree {
+		switch node.(type) {
+		case *NodeTarget:
+			tg := node.(*NodeTarget)
+			log.Printf("info:Print:target %v\n", tg.ID.Value())
+			for _, expr := range tg.Prerequisites {
+				log.Printf("info:Print:prerequisite %v\n", expr.Value())
+			}
+			for _, expr := range tg.Recipe {
+				log.Printf("info:Print:recipe %v\n", expr.Value())
+			}
+		default:
+			log.Printf("err: unknown node type\n")
 		}
 	}
 }
