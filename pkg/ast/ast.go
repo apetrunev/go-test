@@ -2,7 +2,9 @@
 package ast
 
 import (
+	"fmt"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/apetrunev/go-test/pkg/lexer"
@@ -201,7 +203,6 @@ func (s *Source) Build(lex lexer.Tokenizer) {
 			case lexer.TokenEqual:
 				s.assignment(lex, expr)
 			}
-			log.Printf("debug: %v\n", expr)
 			continue
 		default:
 			log.Printf("info:Build: %v\n", lex.TokenToStr(t))
@@ -259,17 +260,21 @@ func (s *Source) Expand() {
 	}
 }
 
-func (s *Source) Print() {
+func (s *Source) Print(out *os.File) {
 	for _, node := range s.Tree {
 		switch node.(type) {
 		case *NodeTarget:
 			tg := node.(*NodeTarget)
-			log.Printf("info:Print:target %v\n", tg.ID.Value())
+			sTarget := fmt.Sprintf("%s:", tg.ID.Value())
+			out.WriteString(sTarget)
 			for _, expr := range tg.Prerequisites {
-				log.Printf("info:Print:prerequisite %v\n", expr.Value())
+				sPrerequisite := fmt.Sprintf(" %s", expr.Value())
+				out.WriteString(sPrerequisite)
 			}
+			out.WriteString("\n")
 			for _, expr := range tg.Recipe {
-				log.Printf("info:Print:recipe %v\n", expr.Value())
+				sRecipe := fmt.Sprintf("\t%s\n", expr.Value())
+				out.WriteString(sRecipe)
 			}
 		default:
 			log.Printf("err: unknown node type\n")
