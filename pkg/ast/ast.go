@@ -65,6 +65,7 @@ type NodeTarget struct {
 	ID            Expr
 	Prerequisites []Expr
 	Recipe        []Expr
+	Expanded      bool
 }
 
 func (n *NodeTarget) Type() AstNodeType {
@@ -204,6 +205,56 @@ func (s *Source) Build(lex lexer.Tokenizer) {
 			continue
 		default:
 			log.Printf("info:Build: %v\n", lex.TokenToStr(t))
+		}
+	}
+}
+
+func (s *Source) expandTarget(tg *NodeTarget) {
+	var prerequisites []string
+	for _, expr := range tg.Prerequisites {
+		switch expr.(type) {
+		case *ExprID:
+			exprID := expr.(*ExprID)
+			prerequisites = append(prerequisites, exprID.ID)
+		case *ExprVar:
+			// not implemented
+		default:
+			log.Fatalf("err:expandTarget: unknown expression type\n")
+		}
+	}
+	for _, expr := range tg.Recipe {
+		// recipe consists of cmd
+		switch expr.(type) {
+		case *ExprCmd:
+			exprCmd := expr.(*ExprCmd)
+			for _, term := range exprCmd.Terms {
+				switch term.(type) {
+				case *ExprVar:
+					exprVar := term.(*ExprVar)
+					if exprVar.ExprID.ID == ExprAllPrerequisites {
+						// replace with list of prerequisites
+						exprVar.Val = strings.Join(prerequisites, "")
+					}
+				case *ExprID:
+				default:
+					log.Fatalf("info:Printf: unknown term type\n")
+				}
+			}
+		default:
+			log.Fatalf("info:Print: unknown cmd type\n")
+		}
+	}
+
+}
+
+func (s *Source) Expand() {
+	for _, node := range s.Tree {
+		switch node.(type) {
+		case *NodeTarget:
+			tg := node.(*NodeTarget)
+			s.expandTarget(tg)
+		default:
+			log.Printf("err: unknown node type\n")
 		}
 	}
 }

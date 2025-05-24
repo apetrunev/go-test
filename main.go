@@ -28,5 +28,6 @@ func main() {
 	source := ast.Source{}
 	// read instruction to tokens
 	source.Build(&lex)
+	source.Expand()
 	source.Print()
 }
